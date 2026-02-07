@@ -22,7 +22,28 @@
         <main>
             <!-- Main Conversion Section -->
             <section class="converter-card">
-                <div class="amount-display" id="amountDisplay">0</div>
+                <!-- Expression preview (shows math like 100+50) -->
+                <div class="expression-line" id="expressionLine">&nbsp;</div>
+
+                <!-- Tappable input - opens keyboard -->
+                <input
+                    type="text"
+                    inputmode="decimal"
+                    class="amount-input"
+                    id="amountInput"
+                    placeholder="0"
+                    autocomplete="off"
+                >
+
+                <!-- Operator buttons (calculator style, no numpad) -->
+                <div class="operator-row">
+                    <button class="op-btn clear-btn" data-op="C">C</button>
+                    <button class="op-btn" data-op="/">&divide;</button>
+                    <button class="op-btn" data-op="*">&times;</button>
+                    <button class="op-btn" data-op="-">&minus;</button>
+                    <button class="op-btn" data-op="+">+</button>
+                    <button class="op-btn equal-btn" data-op="=">=</button>
+                </div>
 
                 <div class="currency-row">
                     <div class="currency-box from-box">
@@ -59,43 +80,11 @@
 
             <!-- Quick Currencies -->
             <section class="quick-currencies">
-                <h2>Quick Convert</h2>
+                <div class="quick-header">
+                    <h2>Quick Convert</h2>
+                    <button class="edit-quick-btn" id="editQuickBtn">Edit</button>
+                </div>
                 <div class="quick-grid" id="quickGrid"></div>
-            </section>
-
-            <!-- Numpad + Calculator -->
-            <section class="numpad-section">
-                <div class="mode-toggle">
-                    <button class="mode-btn active" id="numpadMode" data-mode="numpad">Numpad</button>
-                    <button class="mode-btn" id="calcMode" data-mode="calc">Calculator</button>
-                </div>
-
-                <div class="calc-expression" id="calcExpression">&nbsp;</div>
-
-                <div class="numpad" id="numpad">
-                    <button class="num-btn" data-val="7">7</button>
-                    <button class="num-btn" data-val="8">8</button>
-                    <button class="num-btn" data-val="9">9</button>
-                    <button class="num-btn op-btn" data-val="/" data-calc-only="true">&divide;</button>
-
-                    <button class="num-btn" data-val="4">4</button>
-                    <button class="num-btn" data-val="5">5</button>
-                    <button class="num-btn" data-val="6">6</button>
-                    <button class="num-btn op-btn" data-val="*" data-calc-only="true">&times;</button>
-
-                    <button class="num-btn" data-val="1">1</button>
-                    <button class="num-btn" data-val="2">2</button>
-                    <button class="num-btn" data-val="3">3</button>
-                    <button class="num-btn op-btn" data-val="-" data-calc-only="true">&minus;</button>
-
-                    <button class="num-btn" data-val=".">.</button>
-                    <button class="num-btn" data-val="0">0</button>
-                    <button class="num-btn del-btn" data-val="del">&#9003;</button>
-                    <button class="num-btn op-btn" data-val="+" data-calc-only="true">+</button>
-
-                    <button class="num-btn clear-btn" data-val="clear">C</button>
-                    <button class="num-btn equal-btn" data-val="=" data-calc-only="true">=</button>
-                </div>
             </section>
         </main>
 
@@ -103,11 +92,14 @@
         <div class="modal-overlay" id="currencyModal">
             <div class="modal">
                 <div class="modal-header">
-                    <h3>Select Currency</h3>
+                    <h3 id="modalTitle">Select Currency</h3>
                     <button class="modal-close" id="modalClose">&times;</button>
                 </div>
                 <input type="text" class="currency-search" id="currencySearch" placeholder="Search currency...">
                 <div class="currency-list" id="currencyList"></div>
+                <div class="modal-footer" id="modalFooter">
+                    <button class="done-btn" id="doneBtn">Done</button>
+                </div>
             </div>
         </div>
     </div>

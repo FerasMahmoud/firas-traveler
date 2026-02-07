@@ -57,21 +57,19 @@ const CURRENCIES = {
     GHS: { name: "Ghanaian Cedi", flag: "\u{1F1EC}\u{1F1ED}", symbol: "GH\u20B5" },
 };
 
-// Default quick-convert currencies shown below the main converter
 const DEFAULT_QUICK = ["EUR", "TRY", "SAR", "GBP", "AED", "JPY"];
 
 // ---- State ----
-let fromCurrency = localStorage.getItem("from") || "USD";
-let toCurrency = localStorage.getItem("to") || "TRY";
+let fromCurrency = localStorage.getItem("ft_from") || "USD";
+let toCurrency = localStorage.getItem("ft_to") || "TRY";
+let quickCurrencies = JSON.parse(localStorage.getItem("ft_quick")) || [...DEFAULT_QUICK];
 let rates = {};
-let input = "0";
-let mode = "numpad"; // "numpad" or "calc"
-let calcExpression = "";
-let selectorTarget = null; // "from" or "to"
-let quickCurrencies = JSON.parse(localStorage.getItem("quick")) || [...DEFAULT_QUICK];
+let modalMode = null; // "from", "to", or "editQuick"
+let editQuickSelection = [];
 
 // ---- DOM refs ----
-const $amountDisplay = document.getElementById("amountDisplay");
+const $amountInput = document.getElementById("amountInput");
+const $expressionLine = document.getElementById("expressionLine");
 const $resultAmount = document.getElementById("resultAmount");
 const $rateInfo = document.getElementById("rateInfo");
 const $fromCode = document.getElementById("fromCode");
@@ -81,11 +79,11 @@ const $toFlag = document.getElementById("toFlag");
 const $ratesStatus = document.getElementById("ratesStatus");
 const $statusText = document.getElementById("statusText");
 const $quickGrid = document.getElementById("quickGrid");
-const $calcExpression = document.getElementById("calcExpression");
 const $modal = document.getElementById("currencyModal");
+const $modalTitle = document.getElementById("modalTitle");
+const $modalFooter = document.getElementById("modalFooter");
 const $currencyList = document.getElementById("currencyList");
 const $currencySearch = document.getElementById("currencySearch");
-const $numpad = document.getElementById("numpad");
 
 // ---- API ----
 const API_URL = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/";
@@ -98,7 +96,6 @@ async function fetchRates(base) {
         const data = await resp.json();
         return data[key] || {};
     } catch {
-        // Fallback mirror
         try {
             const resp = await fetch(`https://latest.currency-api.pages.dev/v1/currencies/${key}.json`);
             const data = await resp.json();
@@ -119,14 +116,13 @@ async function loadRates() {
         const now = new Date();
         $ratesStatus.className = "rates-status";
         $statusText.textContent = `Updated ${now.toLocaleTimeString()}`;
-        localStorage.setItem("ratesCache", JSON.stringify({ base: fromCurrency, rates, time: Date.now() }));
+        localStorage.setItem("ft_ratesCache", JSON.stringify({ base: fromCurrency, rates, time: Date.now() }));
     } else {
-        // Try cache
-        const cache = JSON.parse(localStorage.getItem("ratesCache") || "null");
+        const cache = JSON.parse(localStorage.getItem("ft_ratesCache") || "null");
         if (cache && cache.base === fromCurrency) {
             rates = cache.rates;
             $ratesStatus.className = "rates-status error";
-            $statusText.textContent = "Offline - using cached rates";
+            $statusText.textContent = "Offline \u2014 using cached rates";
         } else {
             $ratesStatus.className = "rates-status error";
             $statusText.textContent = "Failed to load rates";
@@ -136,17 +132,47 @@ async function loadRates() {
     renderQuickGrid();
 }
 
+// ---- Math evaluation ----
+function evaluateExpression(expr) {
+    const sanitized = expr.replace(/[^0-9+\-*/.() ]/g, "");
+    if (!sanitized || /[+\-*/.]$/.test(sanitized.trim())) return null;
+    try {
+        const result = Function('"use strict"; return (' + sanitized + ')')();
+        return isFinite(result) ? result : null;
+    } catch {
+        return null;
+    }
+}
+
+function isExpression(val) {
+    return /[+*/]/.test(val) || /(?!^)-/.test(val) || /\d\s*-\s*\d/.test(val);
+}
+
 // ---- Conversion ----
 function getRate(from, to) {
     if (from === to) return 1;
-    const f = from.toLowerCase();
     const t = to.toLowerCase();
     if (rates[t] !== undefined) return rates[t];
     return null;
 }
 
 function convert() {
-    const amount = parseFloat(input) || 0;
+    const raw = $amountInput.value.trim();
+    let amount = 0;
+
+    if (isExpression(raw)) {
+        const result = evaluateExpression(raw);
+        if (result !== null) {
+            amount = result;
+            $expressionLine.textContent = `${raw} = ${formatNumber(result)}`;
+        } else {
+            $expressionLine.textContent = raw + " ...";
+        }
+    } else {
+        amount = parseFloat(raw) || 0;
+        $expressionLine.innerHTML = "&nbsp;";
+    }
+
     const rate = getRate(fromCurrency, toCurrency);
     if (rate === null) {
         $resultAmount.textContent = "---";
@@ -154,16 +180,15 @@ function convert() {
         return;
     }
     const result = amount * rate;
-    $resultAmount.textContent = formatNumber(result, toCurrency);
-    $rateInfo.textContent = `1 ${fromCurrency} = ${formatNumber(rate, toCurrency, 4)} ${toCurrency}`;
+    $resultAmount.textContent = formatNumber(result);
+    $rateInfo.textContent = `1 ${fromCurrency} = ${formatNumber(rate, 4)} ${toCurrency}`;
+
+    localStorage.setItem("ft_lastInput", raw);
 }
 
-function formatNumber(num, currency, minDecimals) {
-    if (Math.abs(num) < 0.01 && num !== 0) {
-        return num.toFixed(6);
-    }
-    const dec = minDecimals || (num >= 100 ? 2 : num >= 1 ? 3 : 4);
-    // Use locale-aware formatting
+function formatNumber(num, minDecimals) {
+    if (Math.abs(num) < 0.01 && num !== 0) return num.toFixed(6);
+    const dec = minDecimals || (Math.abs(num) >= 100 ? 2 : Math.abs(num) >= 1 ? 3 : 4);
     return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: dec });
 }
 
@@ -175,27 +200,31 @@ function updateCurrencyDisplay() {
     $toCode.textContent = toCurrency;
     $fromFlag.textContent = from.flag;
     $toFlag.textContent = to.flag;
-    localStorage.setItem("from", fromCurrency);
-    localStorage.setItem("to", toCurrency);
-}
-
-function updateAmountDisplay() {
-    $amountDisplay.textContent = input === "0" ? "0" : input;
+    localStorage.setItem("ft_from", fromCurrency);
+    localStorage.setItem("ft_to", toCurrency);
 }
 
 // ---- Quick Grid ----
 function renderQuickGrid() {
     $quickGrid.innerHTML = "";
+    const raw = $amountInput.value.trim();
+    let amount = 0;
+    if (isExpression(raw)) {
+        const result = evaluateExpression(raw);
+        if (result !== null) amount = result;
+    } else {
+        amount = parseFloat(raw) || 0;
+    }
+
     quickCurrencies.forEach(code => {
         const cur = CURRENCIES[code] || { flag: "", name: code };
         const card = document.createElement("div");
         card.className = "quick-card" + (code === toCurrency ? " active" : "");
 
-        const amount = parseFloat(input) || 0;
         let converted = "";
         if (amount > 0 && rates[code.toLowerCase()] !== undefined) {
             const val = amount * rates[code.toLowerCase()];
-            converted = formatNumber(val, code);
+            converted = formatNumber(val);
         }
 
         card.innerHTML = `
@@ -213,136 +242,67 @@ function renderQuickGrid() {
     });
 }
 
-// ---- Numpad / Calculator ----
-function handleInput(val) {
-    if (val === "clear") {
-        input = "0";
-        calcExpression = "";
-        $calcExpression.innerHTML = "&nbsp;";
-        updateAmountDisplay();
-        convert();
-        renderQuickGrid();
-        return;
-    }
-
-    if (val === "del") {
-        if (mode === "calc" && calcExpression.length > 0) {
-            calcExpression = calcExpression.slice(0, -1);
-            $calcExpression.textContent = calcExpression || " ";
-            // Also update input from expression's last number
-            const nums = calcExpression.split(/[\+\-\*\/]/);
-            const last = nums[nums.length - 1];
-            if (last && !isNaN(parseFloat(last))) {
-                input = last;
-            }
-        } else {
-            input = input.length > 1 ? input.slice(0, -1) : "0";
-        }
-        updateAmountDisplay();
-        convert();
-        renderQuickGrid();
-        return;
-    }
-
-    if (val === "=") {
-        if (mode === "calc" && calcExpression) {
-            try {
-                // Safe eval using Function constructor (only math ops)
-                const sanitized = calcExpression.replace(/[^0-9+\-*/.() ]/g, "");
-                if (sanitized) {
-                    const result = Function('"use strict"; return (' + sanitized + ')')();
-                    if (isFinite(result)) {
-                        input = String(Math.round(result * 1000000) / 1000000);
-                        calcExpression = "";
-                        $calcExpression.innerHTML = "&nbsp;";
-                        updateAmountDisplay();
-                        convert();
-                        renderQuickGrid();
-                    }
-                }
-            } catch {
-                // Invalid expression, ignore
-            }
-        }
-        return;
-    }
-
-    // Operators (calc mode only)
-    if (["+", "-", "*", "/"].includes(val)) {
-        if (mode !== "calc") return;
-        if (calcExpression === "") {
-            calcExpression = input + val;
-        } else {
-            // Replace trailing operator or append
-            if (/[\+\-\*\/]$/.test(calcExpression)) {
-                calcExpression = calcExpression.slice(0, -1) + val;
-            } else {
-                calcExpression += val;
-            }
-        }
-        $calcExpression.textContent = calcExpression;
-        return;
-    }
-
-    // Number / dot
-    if (mode === "calc" && calcExpression) {
-        // Append to expression
-        calcExpression += val;
-        $calcExpression.textContent = calcExpression;
-        // Extract last number for display
-        const nums = calcExpression.split(/[\+\-\*\/]/);
-        const last = nums[nums.length - 1];
-        if (last) input = last;
-    } else {
-        if (val === "." && input.includes(".")) return;
-        if (input === "0" && val !== ".") {
-            input = val;
-        } else {
-            input += val;
-        }
-    }
-
-    updateAmountDisplay();
+// ---- Input events ----
+$amountInput.addEventListener("input", () => {
     convert();
     renderQuickGrid();
-}
-
-// ---- Mode Toggle ----
-document.getElementById("numpadMode").addEventListener("click", () => setMode("numpad"));
-document.getElementById("calcMode").addEventListener("click", () => setMode("calc"));
-
-function setMode(m) {
-    mode = m;
-    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
-    // Show/hide calc-only buttons
-    document.querySelectorAll("[data-calc-only]").forEach(btn => {
-        btn.classList.toggle("hidden", m !== "calc");
-    });
-    if (m === "numpad") {
-        calcExpression = "";
-        $calcExpression.innerHTML = "&nbsp;";
-    }
-}
-
-// ---- Numpad Event ----
-$numpad.addEventListener("click", (e) => {
-    const btn = e.target.closest(".num-btn");
-    if (!btn) return;
-    handleInput(btn.dataset.val);
 });
 
-// Keyboard support
-document.addEventListener("keydown", (e) => {
-    if ($modal.classList.contains("open")) return;
-    if (e.key >= "0" && e.key <= "9") handleInput(e.key);
-    else if (e.key === ".") handleInput(".");
-    else if (e.key === "Backspace") handleInput("del");
-    else if (e.key === "Escape") handleInput("clear");
-    else if (e.key === "Enter" || e.key === "=") handleInput("=");
-    else if (e.key === "+") handleInput("+");
-    else if (e.key === "-") handleInput("-");
-    else if (e.key === "*") handleInput("*");
-    else if (e.key === "/") { e.preventDefault(); handleInput("/"); }
+// ---- Operator buttons ----
+document.querySelectorAll(".operator-row .op-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const op = btn.dataset.op;
+
+        if (op === "C") {
+            $amountInput.value = "";
+            $expressionLine.innerHTML = "&nbsp;";
+            convert();
+            renderQuickGrid();
+            $amountInput.focus();
+            return;
+        }
+
+        if (op === "=") {
+            const raw = $amountInput.value.trim();
+            if (isExpression(raw)) {
+                const result = evaluateExpression(raw);
+                if (result !== null) {
+                    $expressionLine.textContent = `${raw} =`;
+                    $amountInput.value = String(Math.round(result * 1000000) / 1000000);
+                    convert();
+                    renderQuickGrid();
+                }
+            }
+            $amountInput.focus();
+            return;
+        }
+
+        const current = $amountInput.value;
+        if (/[+\-*/]$/.test(current.trim())) {
+            $amountInput.value = current.trim().slice(0, -1) + op;
+        } else {
+            $amountInput.value = current + op;
+        }
+        convert();
+        renderQuickGrid();
+        $amountInput.focus();
+    });
+});
+
+$amountInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        const raw = $amountInput.value.trim();
+        if (isExpression(raw)) {
+            const result = evaluateExpression(raw);
+            if (result !== null) {
+                $expressionLine.textContent = `${raw} =`;
+                $amountInput.value = String(Math.round(result * 1000000) / 1000000);
+                convert();
+                renderQuickGrid();
+            }
+        }
+    }
 });
 
 // ---- Swap ----
@@ -355,68 +315,117 @@ document.getElementById("swapBtn").addEventListener("click", () => {
 // ---- Currency Selector Modal ----
 document.getElementById("fromSelector").addEventListener("click", () => openModal("from"));
 document.getElementById("toSelector").addEventListener("click", () => openModal("to"));
+document.getElementById("editQuickBtn").addEventListener("click", () => openModal("editQuick"));
 document.getElementById("modalClose").addEventListener("click", closeModal);
 $modal.addEventListener("click", (e) => { if (e.target === $modal) closeModal(); });
 
+document.getElementById("doneBtn").addEventListener("click", () => {
+    if (modalMode === "editQuick") {
+        quickCurrencies = [...editQuickSelection];
+        localStorage.setItem("ft_quick", JSON.stringify(quickCurrencies));
+        renderQuickGrid();
+    }
+    closeModal();
+});
+
 function openModal(target) {
-    selectorTarget = target;
+    modalMode = target;
     $modal.classList.add("open");
     $currencySearch.value = "";
+
+    if (target === "editQuick") {
+        $modalTitle.textContent = "Choose Quick Currencies";
+        $modalFooter.classList.add("show");
+        editQuickSelection = [...quickCurrencies];
+    } else {
+        $modalTitle.textContent = "Select Currency";
+        $modalFooter.classList.remove("show");
+    }
+
     renderCurrencyList();
     setTimeout(() => $currencySearch.focus(), 100);
 }
 
 function closeModal() {
     $modal.classList.remove("open");
-    selectorTarget = null;
+    $modalFooter.classList.remove("show");
+    modalMode = null;
 }
 
 $currencySearch.addEventListener("input", () => renderCurrencyList());
 
-function renderCurrencyList(filter) {
+function renderCurrencyList() {
     const search = ($currencySearch.value || "").toLowerCase();
-    const selected = selectorTarget === "from" ? fromCurrency : toCurrency;
+    const selected = modalMode === "from" ? fromCurrency :
+                     modalMode === "to" ? toCurrency : null;
 
     $currencyList.innerHTML = "";
     Object.entries(CURRENCIES).forEach(([code, info]) => {
         if (search && !code.toLowerCase().includes(search) && !info.name.toLowerCase().includes(search)) {
             return;
         }
+
         const item = document.createElement("div");
-        item.className = "currency-item" + (code === selected ? " selected" : "");
-        item.innerHTML = `
-            <span class="ci-flag">${info.flag}</span>
-            <div class="ci-info">
-                <div class="ci-code">${code}</div>
-                <div class="ci-name">${info.name}</div>
-            </div>
-            ${code === selected ? '<span class="ci-check">&#10003;</span>' : ""}
-        `;
-        item.addEventListener("click", () => {
-            if (selectorTarget === "from") {
-                fromCurrency = code;
-                updateCurrencyDisplay();
-                loadRates();
-            } else {
-                toCurrency = code;
-                updateCurrencyDisplay();
-                convert();
-                renderQuickGrid();
-            }
-            closeModal();
-        });
+
+        if (modalMode === "editQuick") {
+            const isSelected = editQuickSelection.includes(code);
+            item.className = "currency-item" + (isSelected ? " selected" : "");
+            item.innerHTML = `
+                <span class="ci-flag">${info.flag}</span>
+                <div class="ci-info">
+                    <div class="ci-code">${code}</div>
+                    <div class="ci-name">${info.name}</div>
+                </div>
+                ${isSelected ? '<span class="ci-check">&#10003;</span>' : ""}
+            `;
+            item.addEventListener("click", () => {
+                const idx = editQuickSelection.indexOf(code);
+                if (idx >= 0) {
+                    editQuickSelection.splice(idx, 1);
+                } else {
+                    editQuickSelection.push(code);
+                }
+                renderCurrencyList();
+            });
+        } else {
+            item.className = "currency-item" + (code === selected ? " selected" : "");
+            item.innerHTML = `
+                <span class="ci-flag">${info.flag}</span>
+                <div class="ci-info">
+                    <div class="ci-code">${code}</div>
+                    <div class="ci-name">${info.name}</div>
+                </div>
+                ${code === selected ? '<span class="ci-check">&#10003;</span>' : ""}
+            `;
+            item.addEventListener("click", () => {
+                if (modalMode === "from") {
+                    fromCurrency = code;
+                    updateCurrencyDisplay();
+                    loadRates();
+                } else {
+                    toCurrency = code;
+                    updateCurrencyDisplay();
+                    convert();
+                    renderQuickGrid();
+                }
+                closeModal();
+            });
+        }
+
         $currencyList.appendChild(item);
     });
 }
 
 // ---- Init ----
 function init() {
-    setMode("numpad");
     updateCurrencyDisplay();
-    updateAmountDisplay();
 
-    // Try loading cached rates first for instant display
-    const cache = JSON.parse(localStorage.getItem("ratesCache") || "null");
+    const lastInput = localStorage.getItem("ft_lastInput");
+    if (lastInput) {
+        $amountInput.value = lastInput;
+    }
+
+    const cache = JSON.parse(localStorage.getItem("ft_ratesCache") || "null");
     if (cache && cache.base === fromCurrency) {
         rates = cache.rates;
         convert();
@@ -425,7 +434,6 @@ function init() {
 
     loadRates();
 
-    // Auto-refresh rates every 30 minutes
     setInterval(() => loadRates(), 30 * 60 * 1000);
 }
 
