@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firas's Traveler - Currency Converter</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>Firas's Traveler</h1>
+            <p class="subtitle">Currency Converter</p>
+            <div class="rates-status" id="ratesStatus">
+                <span class="status-dot"></span>
+                <span id="statusText">Loading rates...</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Main Conversion Section -->
+            <section class="converter-card">
+                <div class="amount-display" id="amountDisplay">0</div>
+
+                <div class="currency-row">
+                    <div class="currency-box from-box">
+                        <label>From</label>
+                        <button class="currency-selector" id="fromSelector">
+                            <span class="currency-flag" id="fromFlag"></span>
+                            <span class="currency-code" id="fromCode">USD</span>
+                            <span class="arrow">&#9662;</span>
+                        </button>
+                    </div>
+
+                    <button class="swap-btn" id="swapBtn" title="Swap currencies">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M7 16l-4-4 4-4"/><path d="M3 12h18"/>
+                            <path d="M17 8l4 4-4 4"/><path d="M21 12H3"/>
+                        </svg>
+                    </button>
+
+                    <div class="currency-box to-box">
+                        <label>To</label>
+                        <button class="currency-selector" id="toSelector">
+                            <span class="currency-flag" id="toFlag"></span>
+                            <span class="currency-code" id="toCode">EUR</span>
+                            <span class="arrow">&#9662;</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="result-display">
+                    <div class="result-amount" id="resultAmount">0</div>
+                    <div class="rate-info" id="rateInfo">1 USD = ... EUR</div>
+                </div>
+            </section>
+
+            <!-- Quick Currencies -->
+            <section class="quick-currencies">
+                <h2>Quick Convert</h2>
+                <div class="quick-grid" id="quickGrid"></div>
+            </section>
+
+            <!-- Numpad + Calculator -->
+            <section class="numpad-section">
+                <div class="mode-toggle">
+                    <button class="mode-btn active" id="numpadMode" data-mode="numpad">Numpad</button>
+                    <button class="mode-btn" id="calcMode" data-mode="calc">Calculator</button>
+                </div>
+
+                <div class="calc-expression" id="calcExpression">&nbsp;</div>
+
+                <div class="numpad" id="numpad">
+                    <button class="num-btn" data-val="7">7</button>
+                    <button class="num-btn" data-val="8">8</button>
+                    <button class="num-btn" data-val="9">9</button>
+                    <button class="num-btn op-btn" data-val="/" data-calc-only="true">&divide;</button>
+
+                    <button class="num-btn" data-val="4">4</button>
+                    <button class="num-btn" data-val="5">5</button>
+                    <button class="num-btn" data-val="6">6</button>
+                    <button class="num-btn op-btn" data-val="*" data-calc-only="true">&times;</button>
+
+                    <button class="num-btn" data-val="1">1</button>
+                    <button class="num-btn" data-val="2">2</button>
+                    <button class="num-btn" data-val="3">3</button>
+                    <button class="num-btn op-btn" data-val="-" data-calc-only="true">&minus;</button>
+
+                    <button class="num-btn" data-val=".">.</button>
+                    <button class="num-btn" data-val="0">0</button>
+                    <button class="num-btn del-btn" data-val="del">&#9003;</button>
+                    <button class="num-btn op-btn" data-val="+" data-calc-only="true">+</button>
+
+                    <button class="num-btn clear-btn" data-val="clear">C</button>
+                    <button class="num-btn equal-btn" data-val="=" data-calc-only="true">=</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Currency Picker Modal -->
+        <div class="modal-overlay" id="currencyModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Select Currency</h3>
+                    <button class="modal-close" id="modalClose">&times;</button>
+                </div>
+                <input type="text" class="currency-search" id="currencySearch" placeholder="Search currency...">
+                <div class="currency-list" id="currencyList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
